@@ -4,6 +4,7 @@
 ### Features
 
 ### Fixes
+* Content with duplicate chunks: fix the chunk index header written by `set_content`, which made such items unreadable (panic or wrongly ordered content)
 * reqwest: bump to 0.12 to address RUSTSEC-2026-0258 (h2 unbounded empty DATA frames) and drop the unmaintained rustls-pemfile 1.x
 
 ### Changes

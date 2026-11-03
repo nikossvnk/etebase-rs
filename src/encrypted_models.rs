@@ -699,27 +699,28 @@ impl EncryptedRevision {
 
         // Shuffle the items and save the ordering if we have more than one
         if !chunks.is_empty() {
+            // `indices[i]` is the shuffled position of the i-th original chunk.
             let mut indices = shuffle(&mut chunks);
 
-            // Filter duplicates and construct the indice list.
+            // Filter duplicates, then remap every index from its shuffled position to the
+            // position of its first occurrence in the deduplicated list.
             let mut uid_indices: HashMap<String, usize> = HashMap::new();
-            chunks = chunks
-                .into_iter()
-                .enumerate()
-                .filter_map(|(i, chunk)| {
-                    let uid = &chunk.0;
-                    match uid_indices.get(uid) {
-                        Some(previous_index) => {
-                            indices[i] = *previous_index;
-                            None
-                        }
-                        None => {
-                            uid_indices.insert(uid.to_string(), i);
-                            Some(chunk)
-                        }
+            let mut deduped_positions = Vec::with_capacity(chunks.len());
+            let mut deduped = Vec::with_capacity(chunks.len());
+            for chunk in chunks {
+                match uid_indices.get(&chunk.0) {
+                    Some(&position) => deduped_positions.push(position),
+                    None => {
+                        uid_indices.insert(chunk.0.clone(), deduped.len());
+                        deduped_positions.push(deduped.len());
+                        deduped.push(chunk);
                     }
-                })
-                .collect();
+                }
+            }
+            chunks = deduped;
+            for index in indices.iter_mut() {
+                *index = deduped_positions[*index];
+            }
 
             // If we have more than one chunk we need to encode the mapping header in the last chunk
             if indices.len() > 1 {
@@ -1035,5 +1036,33 @@ impl EncryptedItem {
 
     pub(crate) fn test_chunk_uids(&self) -> Vec<String> {
         self.content.chunks.iter().map(|x| x.0.clone()).collect()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{AccountCryptoManager, EncryptedCollection};
+    use crate::utils::randombytes_deterministic;
+
+    /// Content whose chunks repeat must round-trip; the shuffle is random, so try several times.
+    #[test]
+    fn duplicate_chunks_round_trip() {
+        crate::init().unwrap();
+
+        let account = AccountCryptoManager::new(&[4; 32], crate::CURRENT_VERSION).unwrap();
+        let block = randombytes_deterministic(40000, &[5; 32]);
+        let cases = [
+            [&block[..], &block[..]].concat(),
+            [&block[..], &block[..], &block[..], b"tail"].concat(),
+            [&block[..], b"middle", &block[..], &block[..]].concat(),
+        ];
+
+        for content in cases.iter() {
+            for _ in 0..10 {
+                let col = EncryptedCollection::new(&account, "type", b"meta", content).unwrap();
+                let crypto_manager = col.crypto_manager(&account).unwrap();
+                assert_eq!(&col.content(&crypto_manager).unwrap(), content);
+            }
+        }
     }
 }
