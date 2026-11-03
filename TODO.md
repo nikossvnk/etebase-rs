@@ -16,4 +16,3 @@ until the next major release.
   `crypto_aead_xchacha20poly1305_ietf`, `crypto_box`, `crypto_sign`, keyed `crypto_generichash`
   (BLAKE2b) and padding. Then port to `libsodium-sys-stable` (same libsodium, least risk), or to the
   RustCrypto crates, and verify against a test server using data created by the old build.
-- Fix `rust-version` in `Cargo.toml`: it claims 1.63.0, but the resolved dependencies need 1.88.

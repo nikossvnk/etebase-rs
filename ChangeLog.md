@@ -7,6 +7,7 @@
 * reqwest: bump to 0.12 to address RUSTSEC-2026-0258 (h2 unbounded empty DATA frames) and drop the unmaintained rustls-pemfile 1.x
 
 ### Changes
+* MSRV: raise `rust-version` to 1.88.0, the minimum required by the current dependencies
 
 ## Version 0.6.1
 ### Features
