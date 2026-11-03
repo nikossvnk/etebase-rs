@@ -3,9 +3,12 @@
 
 use std::convert::TryInto;
 
-use sodiumoxide::{
-    base64,
-    padding::{pad, unpad},
+use libsodium_rs::{
+    crypto_stream::{xchacha20, Key as StreamKey},
+    random,
+    utils::{
+        base642bin, bin2base64, pad, unpad, BASE64_VARIANT_URLSAFE_NO_PADDING as URLSAFE_NO_PADDING,
+    },
 };
 
 use super::error::{Error, Result};
@@ -38,7 +41,7 @@ pub const SYMMETRIC_NONCE_SIZE: usize = 24; // sodium.crypto_aead_xchacha20poly1
 /// assert!(b.is_empty());
 /// ```
 pub fn randombytes(size: usize) -> Vec<u8> {
-    sodiumoxide::randombytes::randombytes(size)
+    random::bytes(size)
 }
 
 /// A version of [`randombytes`] that returns a fixed-size array instead of a Vec.
@@ -55,7 +58,7 @@ pub fn randombytes(size: usize) -> Vec<u8> {
 /// let b: [u8; 10] = randombytes_array();
 /// ```
 pub fn randombytes_array<const N: usize>() -> [u8; N] {
-    sodiumoxide::randombytes::randombytes(N)
+    random::bytes(N)
         .try_into()
         .expect("randombytes() returned a Vec with wrong size")
 }
@@ -90,11 +93,10 @@ pub fn randombytes_array<const N: usize>() -> [u8; N] {
 /// ```
 pub fn randombytes_deterministic(size: usize, seed: &[u8; 32]) -> Vec<u8> {
     // Not exactly like the sodium randombytes_deterministic but close enough
-    let nonce =
-        sodiumoxide::crypto::stream::xchacha20::Nonce(*b"LibsodiumDRG\0\0\0\0\0\0\0\0\0\0\0\0");
-    let key = sodiumoxide::crypto::stream::xchacha20::Key(*seed);
+    let nonce = xchacha20::Nonce::from_bytes(*b"LibsodiumDRG\0\0\0\0\0\0\0\0\0\0\0\0");
+    let key = StreamKey::from_slice(seed).expect("seed has the stream key size");
 
-    sodiumoxide::crypto::stream::xchacha20::stream(size, &nonce, &key)
+    xchacha20::stream(size, &nonce, &key).expect("xchacha20 stream failed")
 }
 
 /// A constant-time comparison function. Returns `true` if `x` and `y` are equal.
@@ -121,7 +123,7 @@ pub fn randombytes_deterministic(size: usize, seed: &[u8; 32]) -> Vec<u8> {
 /// assert_eq!(Ok(()), validate_password(b"hunter2"));
 /// ```
 pub fn memcmp(x: &[u8], y: &[u8]) -> bool {
-    sodiumoxide::utils::memcmp(x, y)
+    libsodium_rs::utils::memcmp(x, y)
 }
 
 /// Converts a Base64 URL encoded string to a Vec of bytes.
@@ -139,7 +141,7 @@ pub fn memcmp(x: &[u8], y: &[u8]) -> bool {
 /// assert_eq!(Ok(b"".to_vec()), from_base64(""));
 /// ```
 pub fn from_base64(string: &StrBase64) -> Result<Vec<u8>> {
-    match base64::decode(string, base64::Variant::UrlSafeNoPadding) {
+    match base642bin(string, URLSAFE_NO_PADDING) {
         Ok(bytes) => Ok(bytes),
         Err(_) => Err(Error::Base64("Failed decoding base64 string")),
     }
@@ -160,7 +162,7 @@ pub fn from_base64(string: &StrBase64) -> Result<Vec<u8>> {
 /// assert_eq!(Ok(""), to_base64(b"").as_deref());
 /// ```
 pub fn to_base64(bytes: &[u8]) -> Result<StringBase64> {
-    Ok(base64::encode(bytes, base64::Variant::UrlSafeNoPadding))
+    Ok(bin2base64(bytes, URLSAFE_NO_PADDING))
 }
 
 /// Fisher–Yates shuffle - an unbiased shuffler
@@ -185,7 +187,7 @@ pub(crate) fn shuffle<T>(a: &mut [T]) -> Vec<usize> {
     let mut shuffled_indices: Vec<usize> = (0..len).collect();
 
     for i in 0..len {
-        let j = i + sodiumoxide::randombytes::randombytes_uniform((len - i) as u32) as usize;
+        let j = i + random::uniform((len - i) as u32) as usize;
         a.swap(i, j);
         shuffled_indices.swap(i, j);
     }
@@ -247,29 +249,15 @@ pub(crate) fn buffer_unpad(buf: &[u8]) -> Result<Vec<u8>> {
 }
 
 pub(crate) fn buffer_pad_fixed(buf: &[u8], blocksize: usize) -> Result<Vec<u8>> {
-    let len = buf.len();
-    let missing = blocksize - (len % blocksize);
-    let padding = len + missing;
-    let mut ret = vec![0; padding];
-    ret[..len].copy_from_slice(buf);
-
-    pad(&mut ret[..], len, blocksize).map_err(|_| Error::Padding("Failed padding"))?;
-
-    Ok(ret)
+    pad(buf, blocksize).map_err(|_| Error::Padding("Failed padding"))
 }
 
 pub(crate) fn buffer_unpad_fixed(buf: &[u8], blocksize: usize) -> Result<Vec<u8>> {
-    let len = buf.len();
-    if len == 0 {
+    if buf.is_empty() {
         return Ok(vec![0; 0]);
     }
 
-    let mut buf = buf.to_vec();
-
-    let new_len =
-        unpad(&buf[..], len, blocksize).map_err(|_| Error::Padding("Failed unpadding"))?;
-    buf.truncate(new_len);
-    Ok(buf)
+    unpad(buf, blocksize).map_err(|_| Error::Padding("Failed unpadding"))
 }
 
 /// A trait for serializing and deserializing to MsgPack

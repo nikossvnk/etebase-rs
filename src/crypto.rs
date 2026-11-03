@@ -3,9 +3,10 @@
 
 use std::convert::TryInto;
 
-use sodiumoxide::crypto::{
-    aead::xchacha20poly1305_ietf as aead, box_, generichash, kdf, pwhash::argon2id13, scalarmult,
-    sign,
+use libsodium_rs::{
+    crypto_aead::xchacha20poly1305 as aead, crypto_box as box_, crypto_generichash as generichash,
+    crypto_kdf as kdf, crypto_pwhash::argon2id, crypto_scalarmult::curve25519 as scalarmult,
+    crypto_sign as sign,
 };
 
 use crate::utils::{SALT_SIZE, SYMMETRIC_KEY_SIZE};
@@ -19,38 +20,45 @@ macro_rules! to_enc_error {
 }
 
 fn generichash_quick(msg: &[u8], key: Option<&[u8]>) -> Result<[u8; 32]> {
-    let mut state = to_enc_error!(
-        generichash::State::new(Some(32), key),
-        "Failed to init hash"
-    )?;
-    to_enc_error!(state.update(msg), "Failed to update hash")?;
-    Ok(to_enc_error!(state.finalize(), "Failed to finalize hash")?
-        .as_ref()
+    let mut state = to_enc_error!(generichash::State::new(key, 32), "Failed to init hash")?;
+    state.update(msg);
+    Ok(state
+        .finalize()
         .try_into()
         .expect("generichash returned result of wrong size"))
 }
 
 pub(crate) fn init() -> Result<()> {
-    to_enc_error!(sodiumoxide::init(), "Failed initialising libsodium")
+    to_enc_error!(libsodium_rs::ensure_init(), "Failed initialising libsodium")
 }
 
 pub(crate) fn derive_key(
     salt: &[u8; SALT_SIZE],
     password: &str,
 ) -> Result<[u8; SYMMETRIC_KEY_SIZE]> {
-    let mut key = [0; SYMMETRIC_KEY_SIZE];
-    let password = password.as_bytes();
-
-    argon2id13::derive_key(
-        &mut key,
-        password,
-        &argon2id13::Salt(*salt),
-        argon2id13::OPSLIMIT_SENSITIVE,
-        argon2id13::MEMLIMIT_MODERATE,
+    let key = argon2id::pwhash(
+        SYMMETRIC_KEY_SIZE,
+        password.as_bytes(),
+        salt,
+        argon2id::OPSLIMIT_SENSITIVE,
+        argon2id::MEMLIMIT_MODERATE,
     )
     .map_err(|_| Error::Encryption("pwhash failed"))?;
 
-    Ok(key)
+    Ok(key
+        .try_into()
+        .expect("pwhash returned result of wrong size"))
+}
+
+fn aead_key(key: &[u8; 32]) -> Result<aead::Key> {
+    to_enc_error!(aead::Key::from_bytes(key), "Got a key of a wrong size")
+}
+
+fn aead_nonce(cipher: &[u8]) -> Result<aead::Nonce> {
+    to_enc_error!(
+        aead::Nonce::try_from_slice(&cipher[..aead::NPUBBYTES]),
+        "Got a nonce of a wrong size"
+    )
 }
 
 pub(crate) struct CryptoManager {
@@ -64,63 +72,46 @@ pub(crate) struct CryptoManager {
 
 impl CryptoManager {
     pub fn new(key: &[u8; 32], context: &[u8; 8], version: u8) -> Result<Self> {
-        let key = kdf::Key(*key);
-        let mut cipher_key = [0; 32];
-        let mut mac_key = [0; 32];
-        let mut asym_key_seed = [0; 32];
-        let mut sub_derivation_key = [0; 32];
-        let mut deterministic_encryption_key = [0; 32];
-
-        to_enc_error!(
-            kdf::derive_from_key(&mut cipher_key, 1, *context, &key),
-            "Failed deriving key"
-        )?;
-        to_enc_error!(
-            kdf::derive_from_key(&mut mac_key, 2, *context, &key),
-            "Failed deriving key"
-        )?;
-        to_enc_error!(
-            kdf::derive_from_key(&mut asym_key_seed, 3, *context, &key),
-            "Failed deriving key"
-        )?;
-        to_enc_error!(
-            kdf::derive_from_key(&mut sub_derivation_key, 4, *context, &key),
-            "Failed deriving key"
-        )?;
-        to_enc_error!(
-            kdf::derive_from_key(&mut deterministic_encryption_key, 5, *context, &key),
-            "Failed deriving key"
-        )?;
+        let key = to_enc_error!(kdf::Key::from_slice(key), "Failed deriving key")?;
+        let derive = |subkey_id: u64| -> Result<[u8; 32]> {
+            let subkey = to_enc_error!(
+                kdf::derive_from_key(32, subkey_id, context, &key),
+                "Failed deriving key"
+            )?;
+            Ok(subkey
+                .try_into()
+                .expect("kdf returned result of wrong size"))
+        };
 
         Ok(Self {
             version,
-            cipher_key,
-            mac_key,
-            asym_key_seed,
-            sub_derivation_key,
-            deterministic_encryption_key,
+            cipher_key: derive(1)?,
+            mac_key: derive(2)?,
+            asym_key_seed: derive(3)?,
+            sub_derivation_key: derive(4)?,
+            deterministic_encryption_key: derive(5)?,
         })
     }
 
     pub fn encrypt(&self, msg: &[u8], additional_data: Option<&[u8]>) -> Result<Vec<u8>> {
-        let key = aead::Key(self.cipher_key);
-        let nonce = aead::gen_nonce();
-        let encrypted = aead::seal(msg, additional_data, &nonce, &key);
-        let ret = [nonce.as_ref(), &encrypted].concat();
+        let key = aead_key(&self.cipher_key)?;
+        let nonce = aead::Nonce::generate();
+        let encrypted = to_enc_error!(
+            aead::encrypt(msg, additional_data, &nonce, &key),
+            "encryption failed"
+        )?;
 
-        Ok(ret)
+        Ok([nonce.as_bytes(), &encrypted[..]].concat())
     }
 
     pub fn decrypt(&self, cipher: &[u8], additional_data: Option<&[u8]>) -> Result<Vec<u8>> {
-        let key = aead::Key(self.cipher_key);
-        let nonce = &cipher[..aead::NONCEBYTES];
-        let nonce: &[u8; aead::NONCEBYTES] =
-            to_enc_error!(nonce.try_into(), "Got a nonce of a wrong size")?;
-        let cipher = &cipher[aead::NONCEBYTES..];
-        Ok(to_enc_error!(
-            aead::open(cipher, additional_data, &aead::Nonce(*nonce), &key),
+        let key = aead_key(&self.cipher_key)?;
+        let nonce = aead_nonce(cipher)?;
+        let cipher = &cipher[aead::NPUBBYTES..];
+        to_enc_error!(
+            aead::decrypt(cipher, additional_data, &nonce, &key),
             "decryption failed"
-        )?)
+        )
     }
 
     pub fn encrypt_detached(
@@ -128,65 +119,38 @@ impl CryptoManager {
         msg: &[u8],
         additional_data: Option<&[u8]>,
     ) -> Result<(Vec<u8>, Vec<u8>)> {
-        let key = aead::Key(self.cipher_key);
-        let nonce = aead::gen_nonce();
-        let mut encrypted = msg.to_owned();
-        let tag = aead::seal_detached(&mut encrypted[..], additional_data, &nonce, &key);
-        let ret = [nonce.as_ref(), &encrypted].concat();
+        let key = aead_key(&self.cipher_key)?;
+        let nonce = aead::Nonce::generate();
+        let (encrypted, tag) = to_enc_error!(
+            aead::encrypt_detached(msg, additional_data, &nonce, &key),
+            "encryption failed"
+        )?;
 
-        Ok((tag[..].to_owned(), ret))
+        Ok((tag, [nonce.as_bytes(), &encrypted[..]].concat()))
     }
 
     pub fn decrypt_detached(
         &self,
         cipher: &[u8],
-        tag: &[u8; aead::TAGBYTES],
+        tag: &[u8; aead::ABYTES],
         additional_data: Option<&[u8]>,
     ) -> Result<Vec<u8>> {
-        let key = aead::Key(self.cipher_key);
-        let tag = aead::Tag(*tag);
-        let nonce = &cipher[..aead::NONCEBYTES];
-        let nonce: &[u8; aead::NONCEBYTES] =
-            to_enc_error!(nonce.try_into(), "Got a nonce of a wrong size")?;
-        let cipher = &cipher[aead::NONCEBYTES..];
-        let mut decrypted = cipher.to_owned();
+        let key = aead_key(&self.cipher_key)?;
+        let nonce = aead_nonce(cipher)?;
+        let cipher = &cipher[aead::NPUBBYTES..];
         to_enc_error!(
-            aead::open_detached(
-                &mut decrypted[..],
-                additional_data,
-                &tag,
-                &aead::Nonce(*nonce),
-                &key
-            ),
+            aead::decrypt_detached(cipher, tag, additional_data, &nonce, &key),
             "decryption failed"
-        )?;
-
-        Ok(decrypted)
+        )
     }
 
     pub fn verify(
         &self,
         cipher: &[u8],
-        tag: &[u8; aead::TAGBYTES],
+        tag: &[u8; aead::ABYTES],
         additional_data: Option<&[u8]>,
     ) -> Result<bool> {
-        let key = aead::Key(self.cipher_key);
-        let tag = aead::Tag(*tag);
-        let nonce = &cipher[..aead::NONCEBYTES];
-        let nonce: &[u8; aead::NONCEBYTES] =
-            to_enc_error!(nonce.try_into(), "Got a nonce of a wrong size")?;
-        let cipher = &cipher[aead::NONCEBYTES..];
-        let mut decrypted = cipher.to_owned();
-        to_enc_error!(
-            aead::open_detached(
-                &mut decrypted[..],
-                additional_data,
-                &tag,
-                &aead::Nonce(*nonce),
-                &key
-            ),
-            "decryption failed"
-        )?;
+        self.decrypt_detached(cipher, tag, additional_data)?;
 
         Ok(true)
     }
@@ -196,15 +160,15 @@ impl CryptoManager {
         msg: &[u8],
         additional_data: Option<&[u8]>,
     ) -> Result<Vec<u8>> {
-        let key = aead::Key(self.deterministic_encryption_key);
+        let key = aead_key(&self.deterministic_encryption_key)?;
         let mac = self.calculate_mac(msg)?;
-        let nonce = &mac[..aead::NONCEBYTES];
-        let nonce: &[u8; aead::NONCEBYTES] =
-            to_enc_error!(nonce.try_into(), "Got a nonce of a wrong size")?;
-        let encrypted = aead::seal(msg, additional_data, &aead::Nonce(*nonce), &key);
-        let ret = [nonce.as_ref(), &encrypted].concat();
+        let nonce = aead_nonce(&mac)?;
+        let encrypted = to_enc_error!(
+            aead::encrypt(msg, additional_data, &nonce, &key),
+            "encryption failed"
+        )?;
 
-        Ok(ret)
+        Ok([nonce.as_bytes(), &encrypted[..]].concat())
     }
 
     pub fn deterministic_decrypt(
@@ -212,15 +176,13 @@ impl CryptoManager {
         cipher: &[u8],
         additional_data: Option<&[u8]>,
     ) -> Result<Vec<u8>> {
-        let key = aead::Key(self.deterministic_encryption_key);
-        let nonce = &cipher[..aead::NONCEBYTES];
-        let nonce: &[u8; aead::NONCEBYTES] =
-            to_enc_error!(nonce.try_into(), "Got a nonce of a wrong size")?;
-        let cipher = &cipher[aead::NONCEBYTES..];
-        Ok(to_enc_error!(
-            aead::open(cipher, additional_data, &aead::Nonce(*nonce), &key),
+        let key = aead_key(&self.deterministic_encryption_key)?;
+        let nonce = aead_nonce(cipher)?;
+        let cipher = &cipher[aead::NPUBBYTES..];
+        to_enc_error!(
+            aead::decrypt(cipher, additional_data, &nonce, &key),
             "decryption failed"
-        )?)
+        )
     }
 
     pub fn derive_subkey(&self, salt: &[u8]) -> Result<[u8; 32]> {
@@ -237,26 +199,27 @@ impl CryptoManager {
 }
 
 pub(crate) struct LoginCryptoManager {
-    pubkey: sign::PublicKey,
-    privkey: sign::SecretKey,
+    keypair: sign::KeyPair,
 }
 
 impl LoginCryptoManager {
     pub fn keygen(seed: &[u8; 32]) -> Result<Self> {
-        let seed = sign::Seed(*seed);
-        let (pubkey, privkey) = sign::keypair_from_seed(&seed);
+        let keypair = to_enc_error!(sign::keypair_from_seed(seed), "Failed generating keypair")?;
 
-        Ok(Self { privkey, pubkey })
+        Ok(Self { keypair })
     }
 
     pub fn sign_detached(&self, msg: &[u8]) -> Result<Vec<u8>> {
-        let ret = sign::sign_detached(msg, &self.privkey);
+        let ret = to_enc_error!(
+            sign::sign_detached(msg, &self.keypair.secret_key),
+            "Failed signing"
+        )?;
 
-        Ok(ret.to_bytes().to_vec())
+        Ok(ret.to_vec())
     }
 
     pub fn pubkey(&self) -> &[u8] {
-        &self.pubkey[..]
+        self.keypair.public_key.as_bytes()
     }
 }
 
@@ -267,55 +230,65 @@ pub(crate) struct BoxCryptoManager {
 
 impl BoxCryptoManager {
     pub fn keygen(seed: Option<&[u8; 32]>) -> Result<Self> {
-        let (pubkey, privkey) = match seed {
+        let keypair = match seed {
             Some(seed) => {
-                let seed = box_::Seed(*seed);
-                box_::keypair_from_seed(&seed)
+                to_enc_error!(box_::KeyPair::from_seed(seed), "Failed generating keypair")?
             }
-            None => box_::gen_keypair(),
+            None => box_::KeyPair::generate(),
         };
 
-        Ok(Self { privkey, pubkey })
+        Ok(Self {
+            pubkey: keypair.public_key,
+            privkey: keypair.secret_key,
+        })
     }
 
     pub fn from_privkey(privkey: &[u8; box_::SECRETKEYBYTES]) -> Result<BoxCryptoManager> {
-        let privkey_scalar = scalarmult::Scalar(*privkey);
-        let privkey = box_::SecretKey(*privkey);
-        let pubkey_scalar = scalarmult::scalarmult_base(&privkey_scalar);
-        let pubkey = box_::PublicKey(pubkey_scalar.0);
+        let pubkey = to_enc_error!(
+            scalarmult::scalarmult_base(privkey),
+            "Failed deriving public key"
+        )?;
 
-        Ok(BoxCryptoManager { privkey, pubkey })
+        Ok(BoxCryptoManager {
+            privkey: box_::SecretKey::from_bytes_exact(*privkey),
+            pubkey: box_::PublicKey::from_bytes_exact(pubkey),
+        })
     }
 
     pub fn encrypt(&self, msg: &[u8], pubkey: &[u8; box_::PUBLICKEYBYTES]) -> Result<Vec<u8>> {
-        let pubkey = box_::PublicKey(*pubkey);
-        let privkey = box_::SecretKey(self.privkey.0);
-        let nonce = box_::gen_nonce();
-        let encrypted = box_::seal(msg, &nonce, &pubkey, &privkey);
-        let ret = [nonce.as_ref(), &encrypted].concat();
+        let pubkey = box_::PublicKey::from_bytes_exact(*pubkey);
+        let nonce = box_::Nonce::generate();
+        let encrypted = to_enc_error!(
+            box_::seal(msg, &nonce, &pubkey, &self.privkey),
+            "encryption failed"
+        )?;
 
-        Ok(ret)
+        Ok([nonce.as_bytes(), &encrypted[..]].concat())
     }
 
-    pub fn decrypt(&self, cipher: &[u8], pubkey: &[u8; sign::PUBLICKEYBYTES]) -> Result<Vec<u8>> {
-        let pubkey = box_::PublicKey(*pubkey);
-        let privkey = box_::SecretKey(self.privkey.0);
+    pub fn decrypt(&self, cipher: &[u8], pubkey: &[u8; box_::PUBLICKEYBYTES]) -> Result<Vec<u8>> {
+        let pubkey = box_::PublicKey::from_bytes_exact(*pubkey);
         let nonce = &cipher[..box_::NONCEBYTES];
-        let nonce: &[u8; box_::NONCEBYTES] =
+        let nonce: [u8; box_::NONCEBYTES] =
             to_enc_error!(nonce.try_into(), "Got a nonce of a wrong size")?;
         let cipher = &cipher[box_::NONCEBYTES..];
-        Ok(to_enc_error!(
-            box_::open(cipher, &box_::Nonce(*nonce), &pubkey, &privkey),
+        to_enc_error!(
+            box_::open(
+                cipher,
+                &box_::Nonce::from_bytes_exact(nonce),
+                &pubkey,
+                &self.privkey
+            ),
             "decryption failed"
-        )?)
+        )
     }
 
     pub fn pubkey(&self) -> &[u8] {
-        &self.pubkey[..]
+        self.pubkey.as_bytes()
     }
 
     pub fn privkey(&self) -> &[u8] {
-        &self.privkey[..]
+        self.privkey.as_bytes()
     }
 }
 
@@ -325,38 +298,27 @@ pub(crate) struct CryptoMac {
 
 impl CryptoMac {
     pub fn new(key: Option<&[u8]>) -> Result<Self> {
-        let state = to_enc_error!(
-            generichash::State::new(Some(32), key),
-            "Failed to init hash"
-        )?;
+        let state = to_enc_error!(generichash::State::new(key, 32), "Failed to init hash")?;
 
         Ok(Self { state })
     }
 
     pub fn update(&mut self, msg: &[u8]) -> Result<()> {
-        Ok(to_enc_error!(
-            self.state.update(msg),
-            "Failed to update hash"
-        )?)
-    }
-
-    pub fn update_with_len_prefix(&mut self, msg: &[u8]) -> Result<()> {
-        let len = msg.len() as u32;
-        to_enc_error!(
-            self.state.update(&len.to_le_bytes()),
-            "Failed to update hash"
-        )?;
-        to_enc_error!(self.state.update(msg), "Failed to update hash")?;
+        self.state.update(msg);
 
         Ok(())
     }
 
-    pub fn finalize(self) -> Result<Vec<u8>> {
-        Ok(
-            to_enc_error!(self.state.finalize(), "Failed to finalize hash")?
-                .as_ref()
-                .to_vec(),
-        )
+    pub fn update_with_len_prefix(&mut self, msg: &[u8]) -> Result<()> {
+        let len = msg.len() as u32;
+        self.state.update(&len.to_le_bytes());
+        self.state.update(msg);
+
+        Ok(())
+    }
+
+    pub fn finalize(mut self) -> Result<Vec<u8>> {
+        Ok(self.state.finalize())
     }
 }
 
@@ -409,7 +371,7 @@ pub fn pretty_fingerprint(content: &[u8]) -> String {
 mod tests {
     use std::convert::TryInto;
 
-    use sodiumoxide::crypto::sign;
+    use libsodium_rs::crypto_sign as sign;
 
     use crate::error::Result;
     use crate::utils::from_base64;
@@ -489,8 +451,8 @@ mod tests {
         let signature = login_crypto_manager.sign_detached(msg).unwrap();
         let pubkey = login_crypto_manager.pubkey();
 
-        let signature = sign::Signature::from_bytes(&signature).unwrap();
-        let pubkey = sign::PublicKey::from_slice(pubkey).unwrap();
+        let signature = signature[..].try_into().unwrap();
+        let pubkey = sign::PublicKey::from_bytes(pubkey).unwrap();
         assert!(sign::verify_detached(&signature, msg, &pubkey));
     }
 

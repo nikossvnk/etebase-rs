@@ -8,9 +8,9 @@ use std::convert::TryInto;
 
 use std::collections::HashMap;
 
+use libsodium_rs::crypto_sign as sign;
 use serde::{Deserialize, Serialize};
 use serde_repr::{Deserialize_repr, Serialize_repr};
-use sodiumoxide::crypto::sign;
 
 use super::{
     chunker::Rollsum,

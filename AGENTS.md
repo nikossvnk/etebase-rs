@@ -63,7 +63,7 @@ cargo clippy --all-features --all-targets -- -D warnings   # CI gate; warnings f
 cargo run --example etebase_test -- USER PASS SERVER_URL [COLLECTION_UID]
 ```
 Native dependencies:
-- `sodiumoxide` (through libsodium-sys) needs a C compiler (`cc`).
+- Crypto is `libsodium-rs` over `libsodium-sys-stable`, which builds its bundled libsodium (1.0.22) from C source, so a C compiler is needed.
 - `openssl-sys` needs the OpenSSL dev headers and `pkg-config`.
 
 ## Code Conventions & Common Patterns
@@ -74,7 +74,7 @@ Native dependencies:
 - **Pluggable HTTP:** implement `ClientImplementation` (`get`, `post`, `put`, `patch`, `delete`). Each method returns a `Response`, not a `Result`.
   - Gate reqwest-specific code with `#[cfg(feature = "networking")]`.
   - `Client` normalizes URLs to http/https with a trailing `/`.
-- Call `etebase::init()` (which runs `sodiumoxide::init`) before any crypto, including in unit tests (`crate::init()`).
+- Call `etebase::init()` (which runs `libsodium_rs::ensure_init`) before any crypto, including in unit tests (`crate::init()`).
 - **Lints:** `#![warn(clippy::all)]` and `#![allow(clippy::unnecessary_wraps)]` are set in `lib.rs`. There is no rustfmt or clippy config file, so defaults apply.
 - **Keep these as they are:**
   - The trait name `MsgPackSerilization`, misspelled on purpose because renaming it breaks the API.
@@ -98,7 +98,7 @@ Native dependencies:
 - **MSRV:** `rust-version = "1.88.0"` must match in three places: `Cargo.toml`, `README.md` and the `push.yml` comment. It is set by the highest `rust-version` among resolved dependencies (the `icu_*` crates).
 - CI also tests on the MSRV with `cargo +nightly generate-lockfile -Z minimal-versions`. Don't raise dependency minimums carelessly.
 - `.gitignore` excludes `Cargo.lock` (library convention), even though a copy exists locally.
-- `sodiumoxide` is deprecated (RUSTSEC-2021-0137). Any crypto backend swap must keep `src/golden_vectors.rs` passing unchanged; never re-record its values or `src/golden_vectors/collection.msgpack`.
+- Any change to the crypto backend or libsodium version must keep `src/golden_vectors.rs` passing unchanged (values recorded with the old sodiumoxide/libsodium 1.0.18 build); never re-record its values or `src/golden_vectors/collection.msgpack`.
 - **ChangeLog:**
   - Add entries under `## Unreleased`, using the subsections `### Features`, `### Fixes` and `### Changes`, one `*` bullet each.
   - Put identifiers in backticks and cite RUSTSEC or CVE IDs.
