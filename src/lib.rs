@@ -9,6 +9,8 @@ mod crypto;
 mod encrypted_models;
 pub mod error;
 pub mod fs_cache;
+#[cfg(test)]
+mod golden_vectors;
 mod http_client;
 mod online_managers;
 mod service;
