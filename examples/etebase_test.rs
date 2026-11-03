@@ -8,14 +8,14 @@ use etebase::{error::Result, Account, Client, Collection, Item};
 const CLIENT_NAME: &str = "etebase-example";
 
 fn print_collection(collection: &Collection) {
-    println!("UID: {}", &collection.uid());
-    println!("Meta: {:?}", &collection.meta().unwrap());
+    println!("UID: {}", collection.uid());
+    println!("Meta: {:?}", collection.meta().unwrap());
     println!();
 }
 
 fn print_item(item: &Item) {
-    println!("UID: {}", &item.uid());
-    println!("Meta: {:?}", &item.meta().unwrap());
+    println!("UID: {}", item.uid());
+    println!("Meta: {:?}", item.meta().unwrap());
     println!();
 }
 

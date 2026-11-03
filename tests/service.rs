@@ -285,14 +285,11 @@ fn collection_types() -> Result<()> {
     }
 
     {
-        let collections = col_mgr.list_multi(
-            vec!["bad.coltype", "some.coltype", "anotherbad"].into_iter(),
-            None,
-        )?;
+        let collections =
+            col_mgr.list_multi(vec!["bad.coltype", "some.coltype", "anotherbad"], None)?;
         assert_eq!(collections.data().len(), 1);
 
-        let collections =
-            col_mgr.list_multi(vec!["bad.coltype", "anotherbad"].into_iter(), None)?;
+        let collections = col_mgr.list_multi(vec!["bad.coltype", "anotherbad"], None)?;
         assert_eq!(collections.data().len(), 0);
     }
 
