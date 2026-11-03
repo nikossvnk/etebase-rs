@@ -41,7 +41,7 @@ jobs:
 
       - name: Run local test Server
         run: |
-          docker run -d -p 3735:3735 etesync/test-server:latest
+          docker run -d -p 3735:3735 ghcr.io/nikossvnk/etesync-server/test-server:latest
           ./scripts/wait-for-it.sh localhost:3735
 
       - name: Run tests

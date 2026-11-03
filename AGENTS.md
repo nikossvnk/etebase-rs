@@ -107,7 +107,7 @@ Native dependencies:
 ## Testing & QA
 Use the standard libtest harness. Integration tests **require a live test server** and **must run single-threaded**, because they share fixed accounts (`test_user` and `test_user2`).
 ```sh
-docker run -p 3735:3735 -d etesync/test-server:latest
+docker run -p 3735:3735 -d ghcr.io/nikossvnk/etesync-server/test-server:latest   # amd64 + arm64
 export ETEBASE_TEST_HOST=localhost:3735        # test_url() panics if unset
 cargo test -- --test-threads=1
 cargo test --test service collection_invitations -- --test-threads=1   # single test

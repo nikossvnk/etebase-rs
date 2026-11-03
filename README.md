@@ -30,10 +30,10 @@ To build:
 $ cargo build
 ```
 
-To test, run the `etesync/test-server` image using the latest version, e.g.,
+To test, run the test-server image (amd64 and arm64) using the latest version, e.g.,
 
 ```
-docker run -p 3735:3735 -d etesync/test-server:latest
+docker run -p 3735:3735 -d ghcr.io/nikossvnk/etesync-server/test-server:latest
 ```
 
 and then set `ETEBASE_TEST_HOST` to the host:port on which that is running; for the docker invocation above, that's
