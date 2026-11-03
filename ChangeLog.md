@@ -3,6 +3,9 @@
 ## Unreleased
 ### Features
 
+### Fixes
+* reqwest: bump to 0.12 to address RUSTSEC-2026-0258 (h2 unbounded empty DATA frames) and drop the unmaintained rustls-pemfile 1.x
+
 ### Changes
 
 ## Version 0.6.1
