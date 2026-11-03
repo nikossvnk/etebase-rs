@@ -34,6 +34,11 @@ openssl = "^0.10.72"
 reqwest = { version = "^0.12.24", features = ["blocking"], optional = true }
 remove_dir_all = "^0.8.2"
 
+[build-dependencies]
+# Transitive build dependency of libsodium-sys-stable (through libflate). Versions before 1.0.2
+# abort its build script with an out-of-bounds write, which `-Z minimal-versions` would select.
+rle-decode-fast = "^1.0.3"
+
 [features]
 default = ["networking"]
 networking = ["reqwest"]

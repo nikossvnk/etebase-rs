@@ -35,6 +35,10 @@ jobs:
   clippy:
     name: Clippy lints
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # actions-rs/clippy-check reports the lints as a check run
+      checks: write
 
     steps:
       - uses: actions/checkout@v3
