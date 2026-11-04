@@ -29,10 +29,14 @@ serde = { version = "^1.0.136", features = ["derive"] }
 serde_bytes = "^0.11.5"
 serde_repr = "^0.1.7"
 rmp-serde = "^1.1.0"
-openssl-sys = "^0.9.108"
-openssl = "^0.10.72"
 reqwest = { version = "^0.12.24", features = ["blocking"], optional = true }
 remove_dir_all = "^0.8.2"
+
+# Not used directly: they raise the minimum versions that reqwest pulls in through native-tls
+# (OpenSSL 3 support, CVE-2025-3416). native-tls only uses OpenSSL outside Windows and Apple targets.
+[target.'cfg(not(any(windows, target_vendor = "apple")))'.dependencies]
+openssl-sys = { version = "^0.9.108", optional = true }
+openssl = { version = "^0.10.72", optional = true }
 
 [build-dependencies]
 # Transitive build dependency of libsodium-sys-stable (through libflate). Versions before 1.0.2
@@ -41,4 +45,4 @@ rle-decode-fast = "^1.0.3"
 
 [features]
 default = ["networking"]
-networking = ["reqwest"]
+networking = ["reqwest", "dep:openssl", "dep:openssl-sys"]
