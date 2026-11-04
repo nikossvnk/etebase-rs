@@ -10,6 +10,8 @@
 ### Changes
 * Crypto: replace the deprecated `sodiumoxide` (RUSTSEC-2021-0137) with `libsodium-rs`, which bundles libsodium 1.0.22. Output is byte-for-byte unchanged
 * MSRV: raise `rust-version` to 1.88.0, the minimum required by the current dependencies
+* `openssl`/`openssl-sys` are only pulled in with the `networking` feature, and not on Windows or Apple targets where native-tls doesn't use OpenSSL
+* Source file SPDX headers now say `BSD-3-Clause`, matching `LICENSE` (relicensed in 0.4.0)
 
 ## Version 0.6.1
 ### Features

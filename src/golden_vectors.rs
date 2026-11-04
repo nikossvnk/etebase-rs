@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: © 2020 Etebase Authors
-// SPDX-License-Identifier: LGPL-2.1-only
+// SPDX-License-Identifier: BSD-3-Clause
 
 //! Golden vectors recorded with the sodiumoxide-based build (libsodium 1.0.18 via libsodium-sys).
 //!

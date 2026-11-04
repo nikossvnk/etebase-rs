@@ -1,5 +1,5 @@
 // SPDX-FileCopyrightText: © 2020 Etebase Authors
-// SPDX-License-Identifier: LGPL-2.1-only
+// SPDX-License-Identifier: BSD-3-Clause
 
 /*
  * The rolling sum implementation is based on Rollsum from bup which is in turn based on rollsum from librsync:
