@@ -1,12 +1,36 @@
 // SPDX-FileCopyrightText: © 2020 EteSync Authors
-// SPDX-License-Identifier: LGPL-2.1-only
+// SPDX-License-Identifier: BSD-3-Clause
 #![allow(dead_code)] // some test crates do not use all of these constants
 
 use std::env;
 
+use etebase::{error::Result, utils::from_base64, Account, Client};
+
 pub fn test_url() -> String {
     let server = env::var("ETEBASE_TEST_HOST").expect("Set ETEBASE_TEST_HOST to run tests");
     format!("http://{}", server)
+}
+
+/// Create `user` on the test server if needed, then reset it to its fixture state.
+pub fn user_reset(user: &TestUser) -> Result<()> {
+    let client = Client::new("etebase-tests", &test_url())?;
+    let acct_user = etebase::User::new(user.username, user.email);
+    // sign-up the account if necessary, ignoring errors as we're about to reset it anyway
+    let _ = Account::signup_key(
+        client.clone(),
+        &acct_user,
+        b"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+    );
+    etebase::test_helpers::test_reset(
+        &client,
+        &acct_user,
+        &from_base64(user.salt)?,
+        &from_base64(user.loginPubkey)?,
+        &from_base64(user.pubkey)?,
+        &from_base64(user.encryptedContent)?,
+    )?;
+
+    Ok(())
 }
 
 #[allow(non_snake_case)]

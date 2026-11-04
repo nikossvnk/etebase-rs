@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: © 2020 EteSync Authors
-// SPDX-License-Identifier: LGPL-2.1-only
+// SPDX-License-Identifier: BSD-3-Clause
 
 mod common;
 
-use common::{sessionStorageKey, test_url, TestUser, USER, USER2};
+use common::{sessionStorageKey, test_url, user_reset, TestUser, USER, USER2};
 use etebase::error::{Error, Result};
 use etebase::utils::{from_base64, randombytes_deterministic};
 use etebase::{
@@ -24,27 +24,6 @@ macro_rules! assert_err {
             _ => None.expect("Got OK when expected failure"),
         }
     };
-}
-
-fn user_reset(user: &TestUser) -> Result<()> {
-    let client = Client::new(CLIENT_NAME, &test_url())?;
-    let acct_user = etebase::User::new(user.username, user.email);
-    // sign-up the account if necessary, ignoring errors as we're about to reset it anyway
-    let _ = Account::signup_key(
-        client.clone(),
-        &acct_user,
-        b"xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
-    );
-    etebase::test_helpers::test_reset(
-        &client,
-        &acct_user,
-        &from_base64(user.salt)?,
-        &from_base64(user.loginPubkey)?,
-        &from_base64(user.pubkey)?,
-        &from_base64(user.encryptedContent)?,
-    )?;
-
-    Ok(())
 }
 
 fn init_test(user: &TestUser) -> Result<Account> {

@@ -1,9 +1,9 @@
 // SPDX-FileCopyrightText: © 2020 EteSync Authors
-// SPDX-License-Identifier: LGPL-2.1-only
+// SPDX-License-Identifier: BSD-3-Clause
 
 mod common;
 
-use common::{sessionStorageKey, test_url, TestUser, USER};
+use common::{sessionStorageKey, test_url, user_reset, TestUser, USER};
 use etebase::error::Result;
 use etebase::{
     fs_cache::FileSystemCache,
@@ -50,6 +50,7 @@ impl Drop for TempDir {
 
 fn init_test_local(user: &TestUser) -> Result<Account> {
     etebase::init()?;
+    user_reset(user)?;
 
     let client = Client::new(CLIENT_NAME, &test_url())?;
     let session_key = from_base64(sessionStorageKey)?;
