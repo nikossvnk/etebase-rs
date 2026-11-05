@@ -3,7 +3,10 @@ use serde::Deserialize;
 use crate::error::{Error, Result};
 
 /// A trait for implementing a custom [network client](crate::Client)
-pub trait ClientImplementation {
+///
+/// A [`Client`](crate::Client) and every object derived from it (accounts, managers) may be
+/// moved to and shared between threads, so implementations must be [`Send`] and [`Sync`].
+pub trait ClientImplementation: Send + Sync {
     /// Makes a GET request
     fn get(&self, url: &str, auth_token: Option<&str>) -> Response;
     /// Makes a POST request

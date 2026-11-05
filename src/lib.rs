@@ -52,3 +52,41 @@ pub const DEFAULT_SERVER_URL: &str = "https://api.etebase.com/";
 pub fn init() -> error::Result<()> {
     crypto::init()
 }
+
+#[cfg(test)]
+mod thread_safety {
+    //! Compile-time checks: language bindings move these types between threads, and share the
+    //! ones that are also `Sync` without extra locking.
+
+    use super::*;
+
+    fn assert_send<T: Send>() {}
+    fn assert_send_sync<T: Send + Sync>() {}
+
+    #[test]
+    fn public_types_are_thread_safe() {
+        assert_send_sync::<Client>();
+        assert_send_sync::<Account>();
+        assert_send_sync::<managers::CollectionManager>();
+        assert_send_sync::<managers::ItemManager>();
+        assert_send_sync::<managers::CollectionInvitationManager>();
+        assert_send_sync::<managers::CollectionMemberManager>();
+        assert_send_sync::<fs_cache::FileSystemCache>();
+        assert_send_sync::<User>();
+        assert_send_sync::<UserProfile>();
+        assert_send_sync::<ItemMetadata>();
+        assert_send_sync::<SignedInvitation>();
+        assert_send_sync::<CollectionMember>();
+        assert_send_sync::<RemovedCollection>();
+        assert_send_sync::<IteratorListResponse<SignedInvitation>>();
+        assert_send_sync::<IteratorListResponse<CollectionMember>>();
+        assert_send_sync::<error::Error>();
+
+        // The etag of these types is a `RefCell`, so they are `Send` but not `Sync`.
+        assert_send::<Collection>();
+        assert_send::<Item>();
+        assert_send::<CollectionListResponse<Collection>>();
+        assert_send::<ItemListResponse<Item>>();
+        assert_send::<IteratorListResponse<Item>>();
+    }
+}
