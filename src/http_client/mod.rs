@@ -107,13 +107,13 @@ impl Client {
     ///
     /// # Examples
     ///
-    /// ```
+    /// ```no_run
     /// use etebase::Client;
     ///
     /// let invalid_client = Client::new("ExampleClient", "https://example.com").unwrap();
     /// assert!(!invalid_client.is_server_valid().unwrap());
     ///
-    /// let valid_client = Client::new("ExampleClient", "https://api.etebase.com/").unwrap();
+    /// let valid_client = Client::new("ExampleClient", "https://etebase.example.com/").unwrap();
     /// assert!(valid_client.is_server_valid().unwrap());
     /// ```
     pub fn is_server_valid(&self) -> Result<bool> {

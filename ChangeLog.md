@@ -8,6 +8,7 @@
 * reqwest: bump to 0.12 to address RUSTSEC-2026-0258 (h2 unbounded empty DATA frames) and drop the unmaintained rustls-pemfile 1.x
 
 ### Changes
+* **Breaking:** remove `DEFAULT_SERVER_URL`. There is no default server any more: callers must always pass the server URL explicitly
 * **Breaking:** `ClientImplementation` now requires `Send + Sync`, so a `Client` built with `Client::new_with_impl` (and the `Account`, managers and caches derived from it) can be moved to and shared between threads, as language bindings do. Implementations holding non-thread-safe state must wrap it, e.g. in a `Mutex`
 * Crypto: replace the deprecated `sodiumoxide` (RUSTSEC-2021-0137) with `libsodium-rs`, which bundles libsodium 1.0.22. Output is byte-for-byte unchanged
 * MSRV: raise `rust-version` to 1.88.0, the minimum required by the current dependencies
