@@ -7,8 +7,8 @@ A Rust library for Etebase
 
 In addition to exposing a Rust API, this library forms the basis of other Etebase libraries, for example libetebase.
 
-![GitHub tag](https://img.shields.io/github/tag/etesync/etesync-rs.svg)
-[![Build Status](https://github.com/etesync/etebase-rs/actions/workflows/push.yml/badge.svg)](https://github.com/etesync/etebase-rs/actions)
+![GitHub tag](https://img.shields.io/github/tag/nikossvnk/etebase-rs.svg)
+[![Build Status](https://github.com/nikossvnk/etebase-rs/actions/workflows/push.yml/badge.svg)](https://github.com/nikossvnk/etebase-rs/actions)
 [![Crates.io](https://img.shields.io/crates/v/etebase)](https://crates.io/crates/etebase)
 [![docs.rs](https://docs.rs/etebase/badge.svg)](https://docs.rs/etebase/)
 

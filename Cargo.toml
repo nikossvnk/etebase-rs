@@ -1,8 +1,8 @@
 [package]
 name = "etebase"
 description = "A Rust client library for Etebase"
-homepage = "https://github.com/etesync/etebase-rs/"
-repository = "https://github.com/etesync/etebase-rs/"
+homepage = "https://github.com/nikossvnk/etebase-rs/"
+repository = "https://github.com/nikossvnk/etebase-rs/"
 version = "0.6.1"
 authors = ["Tom Hacohen <tom@stosb.com>"]
 edition = "2018"
