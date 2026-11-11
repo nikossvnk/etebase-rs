@@ -1,5 +1,4 @@
 <p align="center">
-  <img width="120" src="https://github.com/etesync/etesync-web/blob/master/src/images/logo.svg" />
   <h1 align="center">Etebase - Encrypt Everything</h1>
 </p>
 
@@ -7,8 +6,6 @@ A Rust library for Etebase
 
 In addition to exposing a Rust API, this library forms the basis of other Etebase libraries, for example libetebase.
 
-![GitHub tag](https://img.shields.io/github/tag/nikossvnk/etebase-rs.svg)
-[![Build Status](https://github.com/nikossvnk/etebase-rs/actions/workflows/push.yml/badge.svg)](https://github.com/nikossvnk/etebase-rs/actions)
 [![Crates.io](https://img.shields.io/crates/v/etebase)](https://crates.io/crates/etebase)
 [![docs.rs](https://docs.rs/etebase/badge.svg)](https://docs.rs/etebase/)
 
@@ -32,7 +29,7 @@ $ cargo build
 To test, run the test-server image (amd64 and arm64) using the latest version, e.g.,
 
 ```
-docker run -p 3735:3735 -d ghcr.io/nikossvnk/etesync-server/test-server:latest
+docker run -p 3735:3735 -d ghcr.io/nikossvnk/ciphwren-server/test-server:latest
 ```
 
 and then set `ETEBASE_TEST_HOST` to the host:port on which that is running; for the docker invocation above, that's
